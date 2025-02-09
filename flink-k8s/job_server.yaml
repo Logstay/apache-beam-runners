@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-jobservice
+  namespace: flink
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink-jobservice
+  template:
+    metadata:
+      labels:
+        app: flink-jobservice
+    spec:
+      containers:
+        - name: jobservice
+          image: apache/beam_flink1.16_job_server:latest # create personalized image with docker-ce
+          ports:
+            - containerPort: 8099
+            - containerPort: 8098
+          resources:
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          volumeMounts:
+            - name: beam-artifact-staging
+              mountPath: "/tmp/beam-artifact-staging"
+          command:
+            [
+              "/bin/bash",
+              "-c",
+              "./flink-job-server.sh --job-host=<HOST_HERE> --job-port=8099 --artifact-port=8098 --expansion-port=-1 --flink-master-url=flink-jobmanager:8081",
+            ]
+            # you can change the host, port and flink master url default: --job-host=localhost | example in k8s deployment --job-host=flink-jobservice.flink.svc.cluster.local
+            # means the expansion port will not be used by the worker server. If it is active, the pod will not go up.
+            # expansion-port = -1 
+      volumes:
+        - name: beam-artifact-staging
+          persistentVolumeClaim:
+            claimName: flink-vol
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-jobservice
+  namespace: flink
+spec:
+  selector:
+    app: flink-jobservice
+  ports:
+    - name: artifact-staging
+      protocol: TCP
+      port: 8098
+      targetPort: 8098
+    - name: job-service
+      protocol: TCP
+      port: 8099
+      targetPort: 8099
+  type: NodePort
